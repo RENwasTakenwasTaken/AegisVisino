@@ -2,3 +2,7 @@
 # CascadeClassifier API that our face detector uses. Stay on 4.x until we
 # migrate the face detector to InsightFace/DNN.
 opencv-python==4.10.0.84
+
+# Face detection + recognition (embeddings) for per-person dedup / suspect search.
+insightface==0.7.3
+onnxruntime          # CPU inference backend InsightFace runs on

@@ -1,15 +1,22 @@
-"""Saves detected faces to disk.
+"""Saves detected faces to disk, with per-person de-duplication.
 
-For now this just crops each face's bounding box and writes it to the "people"
-folder. Later, this same class is where face-recognition/embedding + de-dup
-("is this a person we've already logged?") will live — the pipeline won't need
-to change, because it just hands us (frame, faces).
+Instead of dumping every crop, we compare each new face's embedding against
+the people we've already seen. Same person -> we log a "seen again" and skip.
+New person -> we assign a new ID, make a folder for them, and save the crop.
+
+This is the foundation for entry logging and suspect-face-search: every person
+becomes one folder + one embedding you can later match against.
+
+NOTE: the known-people registry currently lives in memory, so it resets when
+the app restarts. Persisting embeddings to disk (e.g. a .npy per person) is the
+natural next step — it won't change this class's interface.
 """
 
 import time
 from pathlib import Path
 
 import cv2
+import numpy as np
 
 
 class FaceStore:
@@ -17,10 +24,12 @@ class FaceStore:
         self.cfg = config
         self.folder = Path(config.folder)
         self.folder.mkdir(parents=True, exist_ok=True)
-        self._last_save = 0.0  # for the cooldown, so we don't spam the disk
+        # Each entry: {"id": int, "embedding": np.ndarray, "count": int}
+        self._known = []
+        self._next_id = 1
 
+    # ---- geometry helpers -------------------------------------------------
     def _crop(self, frame, box):
-        """Crop the face with a little padding, clamped to the frame edges."""
         x, y, w, h = box
         pad = int(max(w, h) * self.cfg.padding)
         h_img, w_img = frame.shape[:2]
@@ -30,25 +39,59 @@ class FaceStore:
         y2 = min(h_img, y + h + pad)
         return frame[y1:y2, x1:x2]
 
+    # ---- recognition ------------------------------------------------------
+    def _match(self, embedding):
+        """Return the known person this embedding matches, or None if new.
+
+        Both embeddings are L2-normalised, so cosine similarity == dot product.
+        """
+        if embedding is None or not self._known:
+            return None
+        sims = [float(np.dot(embedding, k["embedding"])) for k in self._known]
+        best_i = int(np.argmax(sims))
+        if sims[best_i] >= self.cfg.recognition_threshold:
+            return self._known[best_i]
+        return None
+
+    def _register(self, embedding):
+        person = {"id": self._next_id, "embedding": embedding, "count": 0}
+        self._known.append(person)
+        self._next_id += 1
+        return person
+
+    # ---- main entry point -------------------------------------------------
     def save(self, frame, faces) -> int:
-        """Save each detected face. Returns how many were written."""
-        if not faces:
-            return 0
-
-        # Cooldown: don't save more than once every `cooldown_seconds`.
-        now = time.time()
-        if now - self._last_save < self.cfg.cooldown_seconds:
-            return 0
-        self._last_save = now
-
-        stamp = time.strftime("%Y%m%d_%H%M%S")
+        """Process detected faces. Returns how many NEW people were saved."""
         saved = 0
+        stamp = time.strftime("%Y%m%d_%H%M%S")
+
         for i, face in enumerate(faces):
+            embedding = face.extra.get("embedding")
+            match = self._match(embedding)
+
+            if match is not None:
+                # Known person — just note we saw them again.
+                match["count"] += 1
+                print(f"[SEEN] person_{match['id']:03d} "
+                      f"(seen {match['count']}x)")
+                continue
+
+            # New person (or no embedding available at all).
+            person = self._register(embedding) if embedding is not None else None
             crop = self._crop(frame, face.box)
             if crop.size == 0:
                 continue
-            path = self.folder / f"face_{stamp}_{i}.jpg"
+
+            if person is not None:
+                person_dir = self.folder / f"person_{person['id']:03d}"
+                person_dir.mkdir(parents=True, exist_ok=True)
+                path = person_dir / f"{stamp}_{i}.jpg"
+                print(f"[NEW] person_{person['id']:03d} -> {path}")
+            else:
+                # Fallback: no embeddings (e.g. Haar engine) -> flat dump.
+                path = self.folder / f"face_{stamp}_{i}.jpg"
+                print(f"[SAVED] {path}")
+
             cv2.imwrite(str(path), crop)
             saved += 1
-            print(f"[SAVED] {path}")
         return saved

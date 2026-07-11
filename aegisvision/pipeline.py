@@ -10,15 +10,25 @@ import cv2
 
 from .camera import Camera
 from .detectors.motion import MotionDetector
-from .detectors.face import FaceDetector
 from .storage.face_store import FaceStore
+
+
+def build_face_detector(config):
+    """Pick the face engine from config. Adding a new engine = one more branch."""
+    if config.face_engine == "insightface":
+        from .detectors.insightface_detector import InsightFaceDetector
+        return InsightFaceDetector(config.insightface)
+    if config.face_engine == "haar":
+        from .detectors.face import FaceDetector
+        return FaceDetector(config.face)
+    raise ValueError(f"Unknown face_engine: {config.face_engine}")
 
 
 class SecurityPipeline:
     def __init__(self, config):
         self.cfg = config
         self.motion = MotionDetector(config.motion)
-        self.face = FaceDetector(config.face)
+        self.face = build_face_detector(config)
         self.face_store = FaceStore(config.face_store) if config.save_faces else None
         self._frame_index = 0
 
@@ -29,19 +39,16 @@ class SecurityPipeline:
 
     def process_frame(self, frame):
         """Run one frame through the logic. Returns (motion, faces)."""
-        motion = self.motion.process(frame)
+        motion = self.motion.process(frame) if self.cfg.motion_gating else []
 
+        # Run face detection when motion gating is off, OR when motion fired.
         faces = []
-        if motion:
-            # Motion is the gate. Face detection (expensive) only runs
-            # when something actually moved.
+        if not self.cfg.motion_gating or motion:
             faces = self.face.process(frame)
             if faces:
-                print(f"[ALERT] Motion + {len(faces)} face(s) detected")
+                print(f"[ALERT] {len(faces)} face(s) detected")
                 if self.face_store is not None:
                     self.face_store.save(frame, faces)
-            else:
-                print("[INFO] Motion detected, no face")
 
         return motion, faces
 
