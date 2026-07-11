@@ -1,0 +1,4 @@
+# Pinned to the 4.x line on purpose: OpenCV 5.0 dropped the legacy Haar
+# CascadeClassifier API that our face detector uses. Stay on 4.x until we
+# migrate the face detector to InsightFace/DNN.
+opencv-python==4.10.0.84
