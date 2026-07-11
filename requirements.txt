@@ -6,3 +6,7 @@ opencv-python==4.10.0.84
 # Face detection + recognition (embeddings) for per-person dedup / suspect search.
 insightface
 onnxruntime          # CPU inference backend InsightFace runs on
+
+# Weapon / threat-object detection (knife via COCO; gun needs a weapon model).
+# NOTE: pulls in PyTorch — a large install, slower on the ARM board.
+ultralytics

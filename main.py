@@ -6,6 +6,7 @@ import sys
 
 from aegisvision.config import (
     AppConfig, InsightFaceConfig, QualityConfig, OcclusionConfig, TamperConfig,
+    YOLOConfig,
 )
 from aegisvision.pipeline import SecurityPipeline
 
@@ -29,6 +30,12 @@ def main():
         ),
         tamper=TamperConfig(
             debug=True if "tamperdebug" in args else False,
+        ),
+        yolo=YOLOConfig(
+            enabled=True if "weapon" in args else False,
+            model_path="yolov8n.pt",   # COCO -> detects "knife"; swap for a gun model
+            conf_threshold=0.4,
+            debug=True if "weapondebug" in args else False,
         ),
         alert_on_concealed=True if "conceal" in args else False,
         insightface=InsightFaceConfig(model_name="buffalo_sc", det_size=320)

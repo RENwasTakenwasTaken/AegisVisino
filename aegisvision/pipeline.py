@@ -46,10 +46,18 @@ class SecurityPipeline:
         self.motion = MotionDetector(config.motion)
         self.face = build_face_detector(config)
         self.tamper = CameraTamperDetector(config.tamper) if config.tamper.enabled else None
+        self.weapon = self._build_weapon_detector(config)
         self.face_store = FaceStore(config.face_store) if config.save_faces else None
         self.alerts = build_alert_manager(config)
         self._covered = False
         self._frame_index = 0
+
+    @staticmethod
+    def _build_weapon_detector(config):
+        if not config.yolo.enabled:
+            return None
+        from .detectors.yolo_detector import YOLODetector
+        return YOLODetector(config.yolo)
 
     def _should_process(self) -> bool:
         """Frame-skipping to save CPU on the embedded board."""
@@ -57,7 +65,7 @@ class SecurityPipeline:
         return self._frame_index % self.cfg.process_every_n_frames == 0
 
     def process_frame(self, frame):
-        """Run one frame through the logic. Returns (motion, faces)."""
+        """Run one frame through the logic. Returns (motion, faces, weapons)."""
         # Camera-cover check first: if we're blinded, there's nothing else to
         # see — alert and skip the rest of the pipeline.
         if self.tamper is not None:
@@ -67,7 +75,17 @@ class SecurityPipeline:
                     self.alerts.fire("camera_covered",
                                      "Camera appears covered / tampered",
                                      frame=frame)
-                return [], []
+                return [], [], []
+
+        # Weapon detection runs EVERY frame, independent of motion/faces — a
+        # threat is critical and can't wait for the motion gate.
+        weapons = []
+        if self.weapon is not None:
+            weapons = self.weapon.process(frame)
+            if weapons and self.cfg.alert_on_weapon:
+                names = ", ".join(sorted({w.label for w in weapons}))
+                self.alerts.fire("weapon", f"Weapon detected: {names}",
+                                 frame=frame, box=weapons[0].box)
 
         motion = self.motion.process(frame) if self.cfg.motion_gating else []
 
@@ -93,9 +111,9 @@ class SecurityPipeline:
             if clean and self.face_store is not None:
                 self.face_store.save(frame, clean)
 
-        return motion, faces
+        return motion, faces, weapons
 
-    def _draw(self, frame, motion, faces):
+    def _draw(self, frame, motion, faces, weapons):
         if self._covered:
             cv2.putText(frame, "CAMERA COVERED", (20, 45),
                         cv2.FONT_HERSHEY_SIMPLEX, 1.1, (0, 0, 255), 3)
@@ -112,6 +130,11 @@ class SecurityPipeline:
             cv2.rectangle(frame, (x, y), (x + w, y + h), colour, 2)
             cv2.putText(frame, label, (x, y - 8),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.6, colour, 2)
+        for d in weapons:
+            x, y, w, h = d.box
+            cv2.rectangle(frame, (x, y), (x + w, y + h), (255, 0, 255), 3)  # magenta
+            cv2.putText(frame, f"{d.label.upper()} {d.confidence:.2f}",
+                        (x, y - 8), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 255), 2)
         return frame
 
     def run(self):
@@ -123,9 +146,9 @@ class SecurityPipeline:
                     break
 
                 if self._should_process():
-                    motion, faces = self.process_frame(frame)
+                    motion, faces, weapons = self.process_frame(frame)
                     if self.cfg.show_window:
-                        frame = self._draw(frame, motion, faces)
+                        frame = self._draw(frame, motion, faces, weapons)
 
                 if self.cfg.show_window:
                     cv2.imshow("AegisVision", frame)

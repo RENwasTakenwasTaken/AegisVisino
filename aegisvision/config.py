@@ -86,11 +86,25 @@ class FaceStoreConfig:
 class TamperConfig:
     # Detect a covered / blinded / defocused camera.
     enabled: bool = True
-    max_std: float = 12.0        # below this pixel std = flat/uniform image
-    max_laplacian: float = 30.0  # below this = little edge detail (blur/cover)
+    max_std: float = 100.0        # below this pixel std = flat/uniform image
+    max_laplacian: float = 100.0  # below this = little edge detail (blur/cover)
     # The flat condition must persist this many processed frames before alerting
     # (stops a brief close-up from triggering it).
     sustained_frames: int = 15
+    debug: bool = False
+
+
+@dataclass
+class YOLOConfig:
+    # Weapon / threat-object detection.
+    enabled: bool = False
+    # Default COCO model detects "knife". For "gun" use a weapon-trained model.
+    model_path: str = "yolov8n.pt"
+    conf_threshold: float = 0.4  # minimum detection confidence
+    imgsz: int = 480             # inference size; smaller = faster on the board
+    # Class names to treat as threats (matched against the model's own labels).
+    target_classes: tuple = ("knife", "gun", "pistol", "rifle", "weapon")
+    device: str = "cpu"          # "cpu" on the Uno Q
     debug: bool = False
 
 
@@ -111,12 +125,14 @@ class AppConfig:
     face_engine: str = "insightface"  # "insightface" (embeddings) or "haar" (light)
     alert_on_concealed: bool = True  # fire an alert when a masked/covered face appears
     alert_on_tamper: bool = True     # fire an alert when the camera is covered
+    alert_on_weapon: bool = True     # fire an alert when a weapon is detected
     motion: MotionConfig = None
     face: FaceConfig = None
     insightface: InsightFaceConfig = None
     quality: QualityConfig = None
     occlusion: OcclusionConfig = None
     tamper: TamperConfig = None
+    yolo: YOLOConfig = None
     face_store: FaceStoreConfig = None
     alert: AlertConfig = None
 
@@ -128,5 +144,6 @@ class AppConfig:
         self.quality = self.quality or QualityConfig()
         self.occlusion = self.occlusion or OcclusionConfig()
         self.tamper = self.tamper or TamperConfig()
+        self.yolo = self.yolo or YOLOConfig()
         self.face_store = self.face_store or FaceStoreConfig()
         self.alert = self.alert or AlertConfig()
