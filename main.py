@@ -14,7 +14,7 @@ def main():
 
     config = AppConfig(
         camera_source=camera_index,
-        quality=QualityConfig(min_face_quality=20.0),
+        quality=QualityConfig(min_face_quality=20.0, debug=True),
         alert_on_concealed=True,
         insightface=InsightFaceConfig(model_name="buffalo_sc", det_size=320)
     )
