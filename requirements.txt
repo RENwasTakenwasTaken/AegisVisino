@@ -4,5 +4,5 @@
 opencv-python==4.10.0.84
 
 # Face detection + recognition (embeddings) for per-person dedup / suspect search.
-insightface==0.7.3
+insightface
 onnxruntime          # CPU inference backend InsightFace runs on

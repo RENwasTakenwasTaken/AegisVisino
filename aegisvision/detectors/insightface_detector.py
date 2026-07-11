@@ -17,9 +17,10 @@ from .base import Detector, Detection
 class InsightFaceDetector(Detector):
     name = "face"
 
-    def __init__(self, config, quality_gate=None):
+    def __init__(self, config, quality_gate=None, occlusion=None):
         self.cfg = config
         self.quality = quality_gate  # optional FaceQualityGate; None = accept all
+        self.occlusion = occlusion   # optional OcclusionAnalyzer (skin-region)
         # Imported lazily so the app still starts if InsightFace isn't installed
         # (e.g. when running the lightweight Haar engine instead).
         from insightface.app import FaceAnalysis
@@ -56,7 +57,7 @@ class InsightFaceDetector(Detector):
                 if not complete:
                     print(f"[SKIP] {reason}")
                     continue
-                concealed = self.quality.is_concealed(quality)
+                concealed = self._is_concealed(frame, box, kps, quality)
 
             detections.append(Detection(
                 label="face",
@@ -68,3 +69,25 @@ class InsightFaceDetector(Detector):
                        "quality": quality, "concealed": concealed},
             ))
         return detections
+
+    def _is_concealed(self, frame, box, kps, quality) -> bool:
+        """Combine the two 'covered face' signals per the occlusion config:
+          - norm  : embedding-magnitude quality gate (general low quality)
+          - skin  : lower-face skin-region analysis (specific: mouth covered)
+        """
+        norm_flag = self.quality.is_concealed(quality) if self.quality else False
+
+        # No skin analyzer configured -> fall back to the norm signal alone.
+        if self.occlusion is None:
+            return norm_flag
+
+        skin_flag, _ = self.occlusion.is_covered(frame, box, kps)
+
+        mode = self.occlusion.cfg.combine
+        if mode == "skin":
+            return skin_flag
+        if mode == "norm":
+            return norm_flag
+        if mode == "and":
+            return norm_flag and skin_flag
+        return norm_flag or skin_flag  # "or" (default)

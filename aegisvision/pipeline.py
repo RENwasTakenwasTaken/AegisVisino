@@ -22,7 +22,9 @@ def build_face_detector(config):
     gate = FaceQualityGate(config.quality)  # shared quality filter for any engine
     if config.face_engine == "insightface":
         from .detectors.insightface_detector import InsightFaceDetector
-        return InsightFaceDetector(config.insightface, gate)
+        from .detectors.occlusion import OcclusionAnalyzer
+        occlusion = OcclusionAnalyzer(config.occlusion)  # skin-region covered-face check
+        return InsightFaceDetector(config.insightface, gate, occlusion)
     if config.face_engine == "haar":
         from .detectors.face import FaceDetector
         return FaceDetector(config.face, gate)

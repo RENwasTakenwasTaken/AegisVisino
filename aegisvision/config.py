@@ -61,6 +61,22 @@ class QualityConfig:
 
 
 @dataclass
+class OcclusionConfig:
+    # Region-based "covered face" detector (nose/mouth skin analysis).
+    enabled: bool = True
+    # Below this fraction of skin pixels in the lower face -> considered covered.
+    # Calibrate with debug=True: watch skin_ratio for a bare face vs a masked one.
+    skin_ratio_threshold: float = 0.30
+    # How to combine this skin signal with the embedding-norm signal:
+    #   "or"   -> covered if EITHER fires (most sensitive; good for robbery)
+    #   "and"  -> covered only if BOTH fire (fewest false positives)
+    #   "skin" -> use only the skin signal
+    #   "norm" -> use only the embedding-norm signal
+    combine: str = "or"
+    debug: bool = False
+
+
+@dataclass
 class FaceStoreConfig:
     folder: str = "people"           # where cropped faces are saved
     padding: float = 0.2             # extra margin around the face box (fraction)
@@ -91,6 +107,7 @@ class AppConfig:
     face: FaceConfig = None
     insightface: InsightFaceConfig = None
     quality: QualityConfig = None
+    occlusion: OcclusionConfig = None
     face_store: FaceStoreConfig = None
     alert: AlertConfig = None
 
@@ -100,5 +117,6 @@ class AppConfig:
         self.face = self.face or FaceConfig()
         self.insightface = self.insightface or InsightFaceConfig()
         self.quality = self.quality or QualityConfig()
+        self.occlusion = self.occlusion or OcclusionConfig()
         self.face_store = self.face_store or FaceStoreConfig()
         self.alert = self.alert or AlertConfig()
