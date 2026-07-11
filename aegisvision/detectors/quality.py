@@ -14,13 +14,15 @@ class FaceQualityGate:
     def __init__(self, config):
         self.cfg = config
 
-    def check(self, frame_shape, box, kps=None, quality=None):
-        """Return (accepted: bool, reason: str).
+    def is_complete(self, frame_shape, box, kps=None):
+        """Is this a whole, in-frame face? Return (complete: bool, reason: str).
+
+        Failing this means the face is a camera artifact (cut off at the edge),
+        NOT a person of interest — the caller should silently drop it.
 
         frame_shape : the frame's .shape (h, w, ...)
         box         : (x, y, w, h)
         kps         : optional list of 5 (x, y) facial landmarks (InsightFace)
-        quality     : optional face-quality score (ArcFace embedding norm)
         """
         h_img, w_img = frame_shape[:2]
         x, y, w, h = box
@@ -44,12 +46,19 @@ class FaceQualityGate:
                 if px < m or py < m or px > (w_img - m) or py > (h_img - m):
                     return False, "landmark outside frame"
 
-        # 4. Occlusion / low-quality: ArcFace embedding magnitude. A masked or
-        #    heavily-covered face scores low here even when fully in-frame.
-        if quality is not None:
-            if self.cfg.debug:
-                print(f"[QUALITY] q={quality:.1f}")
-            if self.cfg.min_face_quality > 0 and quality < self.cfg.min_face_quality:
-                return False, f"occluded/low quality (q={quality:.1f})"
-
         return True, "ok"
+
+    def is_concealed(self, quality):
+        """Is this (complete) face covered/masked? Uses the ArcFace embedding
+        magnitude: a masked or hand-covered face scores LOW even in full frame.
+
+        Unlike an incomplete face, a concealed face IS a person of interest —
+        the caller should raise an alert, not silently drop it.
+        """
+        if quality is None:
+            return False
+        if self.cfg.debug:
+            print(f"[QUALITY] q={quality:.1f}")
+        if self.cfg.min_face_quality <= 0:
+            return False  # occlusion gate disabled / not yet calibrated
+        return quality < self.cfg.min_face_quality

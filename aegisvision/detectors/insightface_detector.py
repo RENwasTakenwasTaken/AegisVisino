@@ -46,14 +46,17 @@ class InsightFaceDetector(Detector):
             quality = (float(np.linalg.norm(f.embedding))
                        if getattr(f, "embedding", None) is not None else None)
 
-            # Quality gate: drop cut-off / incomplete / occluded faces before
-            # they ever reach recognition, so they can't be mistaken for a new
-            # person.
+            # Quality gate. Two distinct outcomes:
+            #  - incomplete (cut off at edge) -> camera artifact, drop silently.
+            #  - concealed (in-frame but masked/covered) -> keep + flag; the
+            #    pipeline turns this into a "concealed person" alert.
+            concealed = False
             if self.quality is not None:
-                ok, reason = self.quality.check(frame.shape, box, kps, quality)
-                if not ok:
+                complete, reason = self.quality.is_complete(frame.shape, box, kps)
+                if not complete:
                     print(f"[SKIP] {reason}")
                     continue
+                concealed = self.quality.is_concealed(quality)
 
             detections.append(Detection(
                 label="face",
@@ -62,6 +65,6 @@ class InsightFaceDetector(Detector):
                 # normed_embedding is L2-normalised, so cosine similarity
                 # between two of them is just a dot product.
                 extra={"embedding": f.normed_embedding, "kps": kps,
-                       "quality": quality},
+                       "quality": quality, "concealed": concealed},
             ))
         return detections

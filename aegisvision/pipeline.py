@@ -11,6 +11,9 @@ import cv2
 from .camera import Camera
 from .detectors.motion import MotionDetector
 from .storage.face_store import FaceStore
+from .alerts.manager import AlertManager
+from .alerts.console import ConsoleAlerter
+from .alerts.snapshot import SnapshotAlerter
 
 
 def build_face_detector(config):
@@ -26,12 +29,21 @@ def build_face_detector(config):
     raise ValueError(f"Unknown face_engine: {config.face_engine}")
 
 
+def build_alert_manager(config):
+    """Assemble the alert outputs. Add the 12V siren / mobile push here later."""
+    alerters = [ConsoleAlerter()]
+    if config.alert.snapshot:
+        alerters.append(SnapshotAlerter(config.alert.snapshot_folder))
+    return AlertManager(alerters, cooldown_seconds=config.alert.cooldown_seconds)
+
+
 class SecurityPipeline:
     def __init__(self, config):
         self.cfg = config
         self.motion = MotionDetector(config.motion)
         self.face = build_face_detector(config)
         self.face_store = FaceStore(config.face_store) if config.save_faces else None
+        self.alerts = build_alert_manager(config)
         self._frame_index = 0
 
     def _should_process(self) -> bool:
@@ -47,10 +59,23 @@ class SecurityPipeline:
         faces = []
         if not self.cfg.motion_gating or motion:
             faces = self.face.process(frame)
-            if faces:
-                print(f"[ALERT] {len(faces)} face(s) detected")
-                if self.face_store is not None:
-                    self.face_store.save(frame, faces)
+
+            # Split faces: concealed (masked/covered) vs clean.
+            concealed = [f for f in faces if f.extra.get("concealed")]
+            clean = [f for f in faces if not f.extra.get("concealed")]
+
+            # Concealed person -> alert (do NOT enroll them as an identity).
+            if concealed and self.cfg.alert_on_concealed:
+                self.alerts.fire(
+                    "concealed_person",
+                    f"{len(concealed)} concealed face(s) detected",
+                    frame=frame,
+                    box=concealed[0].box,
+                )
+
+            # Clean faces -> log/recognise as normal.
+            if clean and self.face_store is not None:
+                self.face_store.save(frame, clean)
 
         return motion, faces
 
@@ -61,9 +86,13 @@ class SecurityPipeline:
             cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 255), 1)
         for d in faces:
             x, y, w, h = d.box
-            cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 0, 255), 2)
-            cv2.putText(frame, "FACE", (x, y - 8),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
+            if d.extra.get("concealed"):
+                colour, label = (0, 140, 255), "CONCEALED"   # orange
+            else:
+                colour, label = (0, 0, 255), "FACE"          # red
+            cv2.rectangle(frame, (x, y), (x + w, y + h), colour, 2)
+            cv2.putText(frame, label, (x, y - 8),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, colour, 2)
         return frame
 
     def run(self):

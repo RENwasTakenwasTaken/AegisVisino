@@ -34,10 +34,11 @@ class FaceDetector(Detector):
         detections = []
         for (x, y, w, h) in faces:
             box = (int(x), int(y), int(w), int(h))
-            # Haar has no landmarks, so the gate only does edge + aspect checks.
+            # Haar has no landmarks/embeddings, so only the completeness (edge +
+            # aspect) check applies — no occlusion score is available here.
             if self.quality is not None:
-                ok, _ = self.quality.check(frame.shape, box, None)
-                if not ok:
+                complete, _ = self.quality.is_complete(frame.shape, box, None)
+                if not complete:
                     continue
             detections.append(Detection(label="face", box=box))
         return detections

@@ -72,6 +72,13 @@ class FaceStoreConfig:
 
 
 @dataclass
+class AlertConfig:
+    cooldown_seconds: float = 5.0   # min gap between repeats of the same alert
+    snapshot: bool = True           # save an evidence image per alert
+    snapshot_folder: str = "alerts"
+
+
+@dataclass
 class AppConfig:
     camera_source: object = 0        # 0 = default webcam; or an RTSP URL string
     process_every_n_frames: int = 2  # skip frames to save CPU (1 = every frame)
@@ -79,11 +86,13 @@ class AppConfig:
     save_faces: bool = True          # crop + store detected faces to disk
     motion_gating: bool = True       # False = always run face detection (no motion gate)
     face_engine: str = "insightface"  # "insightface" (embeddings) or "haar" (light)
+    alert_on_concealed: bool = True  # fire an alert when a masked/covered face appears
     motion: MotionConfig = None
     face: FaceConfig = None
     insightface: InsightFaceConfig = None
     quality: QualityConfig = None
     face_store: FaceStoreConfig = None
+    alert: AlertConfig = None
 
     def __post_init__(self):
         # Give each sub-config a default instance if the caller didn't pass one.
@@ -92,3 +101,4 @@ class AppConfig:
         self.insightface = self.insightface or InsightFaceConfig()
         self.quality = self.quality or QualityConfig()
         self.face_store = self.face_store or FaceStoreConfig()
+        self.alert = self.alert or AlertConfig()
