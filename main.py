@@ -5,7 +5,7 @@ All settings are here.
 import sys
 
 from aegisvision.config import (
-    AppConfig, InsightFaceConfig, QualityConfig, OcclusionConfig,
+    AppConfig, InsightFaceConfig, QualityConfig, OcclusionConfig, TamperConfig,
 )
 from aegisvision.pipeline import SecurityPipeline
 
@@ -26,6 +26,9 @@ def main():
         occlusion=OcclusionConfig(
             skin_ratio_threshold=0.30,  # lower face below this skin ratio = covered
             debug=True if "occlusiondebug" in args else False,
+        ),
+        tamper=TamperConfig(
+            debug=True if "tamperdebug" in args else False,
         ),
         alert_on_concealed=True if "conceal" in args else False,
         insightface=InsightFaceConfig(model_name="buffalo_sc", det_size=320)

@@ -83,6 +83,18 @@ class FaceStoreConfig:
 
 
 @dataclass
+class TamperConfig:
+    # Detect a covered / blinded / defocused camera.
+    enabled: bool = True
+    max_std: float = 12.0        # below this pixel std = flat/uniform image
+    max_laplacian: float = 30.0  # below this = little edge detail (blur/cover)
+    # The flat condition must persist this many processed frames before alerting
+    # (stops a brief close-up from triggering it).
+    sustained_frames: int = 15
+    debug: bool = False
+
+
+@dataclass
 class AlertConfig:
     cooldown_seconds: float = 5.0   # min gap between repeats of the same alert
     snapshot: bool = True           # save an evidence image per alert
@@ -98,11 +110,13 @@ class AppConfig:
     motion_gating: bool = True       # False = always run face detection (no motion gate)
     face_engine: str = "insightface"  # "insightface" (embeddings) or "haar" (light)
     alert_on_concealed: bool = True  # fire an alert when a masked/covered face appears
+    alert_on_tamper: bool = True     # fire an alert when the camera is covered
     motion: MotionConfig = None
     face: FaceConfig = None
     insightface: InsightFaceConfig = None
     quality: QualityConfig = None
     occlusion: OcclusionConfig = None
+    tamper: TamperConfig = None
     face_store: FaceStoreConfig = None
     alert: AlertConfig = None
 
@@ -113,5 +127,6 @@ class AppConfig:
         self.insightface = self.insightface or InsightFaceConfig()
         self.quality = self.quality or QualityConfig()
         self.occlusion = self.occlusion or OcclusionConfig()
+        self.tamper = self.tamper or TamperConfig()
         self.face_store = self.face_store or FaceStoreConfig()
         self.alert = self.alert or AlertConfig()

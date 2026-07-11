@@ -10,6 +10,7 @@ import cv2
 
 from .camera import Camera
 from .detectors.motion import MotionDetector
+from .detectors.tamper import CameraTamperDetector
 from .storage.face_store import FaceStore
 from .alerts.manager import AlertManager
 from .alerts.console import ConsoleAlerter
@@ -44,8 +45,10 @@ class SecurityPipeline:
         self.cfg = config
         self.motion = MotionDetector(config.motion)
         self.face = build_face_detector(config)
+        self.tamper = CameraTamperDetector(config.tamper) if config.tamper.enabled else None
         self.face_store = FaceStore(config.face_store) if config.save_faces else None
         self.alerts = build_alert_manager(config)
+        self._covered = False
         self._frame_index = 0
 
     def _should_process(self) -> bool:
@@ -55,6 +58,17 @@ class SecurityPipeline:
 
     def process_frame(self, frame):
         """Run one frame through the logic. Returns (motion, faces)."""
+        # Camera-cover check first: if we're blinded, there's nothing else to
+        # see — alert and skip the rest of the pipeline.
+        if self.tamper is not None:
+            self._covered, _ = self.tamper.check(frame)
+            if self._covered:
+                if self.cfg.alert_on_tamper:
+                    self.alerts.fire("camera_covered",
+                                     "Camera appears covered / tampered",
+                                     frame=frame)
+                return [], []
+
         motion = self.motion.process(frame) if self.cfg.motion_gating else []
 
         # Run face detection when motion gating is off, OR when motion fired.
@@ -81,8 +95,11 @@ class SecurityPipeline:
 
         return motion, faces
 
-    @staticmethod
-    def _draw(frame, motion, faces):
+    def _draw(self, frame, motion, faces):
+        if self._covered:
+            cv2.putText(frame, "CAMERA COVERED", (20, 45),
+                        cv2.FONT_HERSHEY_SIMPLEX, 1.1, (0, 0, 255), 3)
+            return frame  # nothing else to draw while blinded
         for d in motion:
             x, y, w, h = d.box
             cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 255), 1)
