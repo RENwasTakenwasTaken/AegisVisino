@@ -47,24 +47,28 @@ class InsightFaceDetector(Detector):
             quality = (float(np.linalg.norm(f.embedding))
                        if getattr(f, "embedding", None) is not None else None)
 
+            # 1. Completeness: drop faces cut off at the frame edge —
+            #    camera artifacts, not people of interest.
             if self.quality is not None:
-                # 1. Completeness: drop faces cut off at the frame edge —
-                #    camera artifacts, not people of interest.
                 complete, reason = self.quality.is_complete(frame.shape, box, kps)
                 if not complete:
                     print(f"[SKIP] {reason}")
                     continue
-                # 2. Enrollment quality: drop faces too blurry/low-quality to
-                #    trust — stops a bad glance from becoming a fake new person.
-                if not self.quality.is_good_quality(quality):
-                    print(f"[SKIP] low quality (q={quality:.1f})")
-                    continue
 
-            # 3. Concealment: skin-region analysis of the lower face. A masked/
-            #    covered face flags here -> the pipeline raises a concealed alert.
+            # 2. Concealment FIRST: a masked face is also low-quality, so we
+            #    must decide concealment before the quality gate — otherwise the
+            #    gate would drop masked people instead of alerting on them.
             concealed = False
             if self.occlusion is not None:
                 concealed, _ = self.occlusion.is_covered(frame, box, kps)
+
+            # 3. Enrollment quality: drop faces too blurry/low-quality to trust
+            #    (stops a bad glance becoming a fake new person). Concealed faces
+            #    are EXEMPT — they head to the alert path and are never enrolled.
+            if (self.quality is not None and not concealed
+                    and not self.quality.is_good_quality(quality)):
+                print(f"[SKIP] low quality (q={quality:.1f})")
+                continue
 
             detections.append(Detection(
                 label="face",

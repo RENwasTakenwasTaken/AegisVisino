@@ -20,7 +20,7 @@ def main():
     config = AppConfig(
         camera_source=camera_index,
         quality=QualityConfig(
-            min_face_quality=20.0,  # below this = too blurry to register as a person
+            min_face_quality=22.0,  # below this = too blurry to register as a person
             debug=True if "qualitydebug" in args else False,
         ),
         occlusion=OcclusionConfig(
