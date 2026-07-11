@@ -1,12 +1,12 @@
-"""Face quality gate.
+"""Face quality gate — geometric completeness only.
 
-Decides whether a detected face is "clean enough" to use. The whole point:
-a face that's cut off by the frame edge, or missing landmarks, produces a
-distorted embedding — which then looks like a brand-new person to the dedup
-logic. So we reject those faces up front instead of trying to recognise them.
+Decides whether a detected face is a whole, in-frame face. A face cut off by
+the frame edge, or missing landmarks, produces a distorted embedding — which
+then looks like a brand-new person to the dedup logic. So we reject those up
+front instead of trying to recognise them.
 
-This is the same idea Google Photos uses: only complete, well-formed faces
-get enrolled; everything else is ignored.
+(Concealment — masks/covered faces — is a separate concern handled by the
+skin-region OcclusionAnalyzer, not here.)
 """
 
 
@@ -48,17 +48,17 @@ class FaceQualityGate:
 
         return True, "ok"
 
-    def is_concealed(self, quality):
-        """Is this (complete) face covered/masked? Uses the ArcFace embedding
-        magnitude: a masked or hand-covered face scores LOW even in full frame.
+    def is_good_quality(self, quality):
+        """Is this face sharp/clear enough to register as an identity?
 
-        Unlike an incomplete face, a concealed face IS a person of interest —
-        the caller should raise an alert, not silently drop it.
+        Uses the ArcFace embedding magnitude: a blurry or half-turned face
+        scores LOW. Rejecting those stops a bad glance from being enrolled as
+        a brand-new person. Returns True when no score / gate disabled.
         """
         if quality is None:
-            return False
+            return True
         if self.cfg.debug:
             print(f"[QUALITY] q={quality:.1f}")
         if self.cfg.min_face_quality <= 0:
-            return False  # occlusion gate disabled / not yet calibrated
-        return quality < self.cfg.min_face_quality
+            return True
+        return quality >= self.cfg.min_face_quality

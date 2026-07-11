@@ -49,30 +49,25 @@ class QualityConfig:
     # Require all 5 InsightFace landmarks to be inside the frame.
     require_landmarks_inside: bool = True
 
-    # --- occlusion / quality proxy -------------------------------------
-    # ArcFace embedding magnitude correlates with face quality: clean frontal
-    # unoccluded faces score HIGH, occluded/blurry/extreme faces score LOW.
-    # Faces below this norm are rejected as occluded/low-quality.
-    # 0.0 = disabled. You MUST calibrate this: run with debug=True, watch the
-    # printed q= values for good vs masked faces, then set the cutoff between.
+    # --- enrollment quality gate ---------------------------------------
+    # Minimum face quality (ArcFace embedding magnitude). A blurry / half-turned
+    # / low-quality face scores LOW here — and would also get a distorted
+    # embedding that looks like a NEW person. So we drop faces below this so
+    # they're never registered as an identity.
+    # 0.0 = disabled. Calibrate with debug=True (watch the q= values).
     min_face_quality: float = 0.0
-    # Print each face's quality score so you can pick min_face_quality.
     debug: bool = False
 
 
 @dataclass
 class OcclusionConfig:
-    # Region-based "covered face" detector (nose/mouth skin analysis).
+    # Region-based "covered face" detector (nose/mouth skin analysis). This is
+    # the sole concealment signal — a masked/covered lower face has a low skin
+    # ratio, which raises the concealed-person alert.
     enabled: bool = True
     # Below this fraction of skin pixels in the lower face -> considered covered.
     # Calibrate with debug=True: watch skin_ratio for a bare face vs a masked one.
     skin_ratio_threshold: float = 0.30
-    # How to combine this skin signal with the embedding-norm signal:
-    #   "or"   -> covered if EITHER fires (most sensitive; good for robbery)
-    #   "and"  -> covered only if BOTH fire (fewest false positives)
-    #   "skin" -> use only the skin signal
-    #   "norm" -> use only the embedding-norm signal
-    combine: str = "or"
     debug: bool = False
 
 

@@ -10,8 +10,8 @@ right mouth corner) to locate the region, then measures skin pixels in YCrCb
 (more lighting-robust than plain RGB/HSV).
 
 Limits (be aware): a BARE HAND is skin-coloured so it may not trigger here;
-and skin detection drifts with lighting / skin tone. That's why the pipeline
-combines this with the embedding-norm signal instead of trusting it alone.
+and skin detection drifts with lighting / skin tone — future work is a light
+sensor or auto-calibration to adapt the threshold to ambient conditions.
 """
 
 import cv2

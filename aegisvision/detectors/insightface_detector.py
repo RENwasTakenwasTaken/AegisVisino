@@ -42,22 +42,29 @@ class InsightFaceDetector(Detector):
             box = (int(x1), int(y1), int(x2 - x1), int(y2 - y1))
             # InsightFace gives 5 landmarks (eyes, nose, mouth corners).
             kps = f.kps.tolist() if getattr(f, "kps", None) is not None else None
-            # Quality/occlusion proxy: magnitude of the RAW (un-normalised)
-            # ArcFace embedding. High = clean face, low = occluded/blurry.
+            # Face-quality score: magnitude of the RAW (un-normalised) ArcFace
+            # embedding. High = sharp/clear face, low = blurry/half-turned.
             quality = (float(np.linalg.norm(f.embedding))
                        if getattr(f, "embedding", None) is not None else None)
 
-            # Quality gate. Two distinct outcomes:
-            #  - incomplete (cut off at edge) -> camera artifact, drop silently.
-            #  - concealed (in-frame but masked/covered) -> keep + flag; the
-            #    pipeline turns this into a "concealed person" alert.
-            concealed = False
             if self.quality is not None:
+                # 1. Completeness: drop faces cut off at the frame edge —
+                #    camera artifacts, not people of interest.
                 complete, reason = self.quality.is_complete(frame.shape, box, kps)
                 if not complete:
                     print(f"[SKIP] {reason}")
                     continue
-                concealed = self._is_concealed(frame, box, kps, quality)
+                # 2. Enrollment quality: drop faces too blurry/low-quality to
+                #    trust — stops a bad glance from becoming a fake new person.
+                if not self.quality.is_good_quality(quality):
+                    print(f"[SKIP] low quality (q={quality:.1f})")
+                    continue
+
+            # 3. Concealment: skin-region analysis of the lower face. A masked/
+            #    covered face flags here -> the pipeline raises a concealed alert.
+            concealed = False
+            if self.occlusion is not None:
+                concealed, _ = self.occlusion.is_covered(frame, box, kps)
 
             detections.append(Detection(
                 label="face",
@@ -69,25 +76,3 @@ class InsightFaceDetector(Detector):
                        "quality": quality, "concealed": concealed},
             ))
         return detections
-
-    def _is_concealed(self, frame, box, kps, quality) -> bool:
-        """Combine the two 'covered face' signals per the occlusion config:
-          - norm  : embedding-magnitude quality gate (general low quality)
-          - skin  : lower-face skin-region analysis (specific: mouth covered)
-        """
-        norm_flag = self.quality.is_concealed(quality) if self.quality else False
-
-        # No skin analyzer configured -> fall back to the norm signal alone.
-        if self.occlusion is None:
-            return norm_flag
-
-        skin_flag, _ = self.occlusion.is_covered(frame, box, kps)
-
-        mode = self.occlusion.cfg.combine
-        if mode == "skin":
-            return skin_flag
-        if mode == "norm":
-            return norm_flag
-        if mode == "and":
-            return norm_flag and skin_flag
-        return norm_flag or skin_flag  # "or" (default)

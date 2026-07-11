@@ -20,12 +20,11 @@ def main():
     config = AppConfig(
         camera_source=camera_index,
         quality=QualityConfig(
-            min_face_quality=20.0,
-            debug=True if "qualitydebug" in args else False
+            min_face_quality=20.0,  # below this = too blurry to register as a person
+            debug=True if "qualitydebug" in args else False,
         ),
         occlusion=OcclusionConfig(
-            skin_ratio_threshold=0.30,
-            combine="or",  # covered if EITHER skin OR norm fires
+            skin_ratio_threshold=0.30,  # lower face below this skin ratio = covered
             debug=True if "occlusiondebug" in args else False,
         ),
         alert_on_concealed=True if "conceal" in args else False,
