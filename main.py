@@ -2,9 +2,12 @@
 All settings are here.
 """
 
+import sys
+
 from aegisvision.config import AppConfig, InsightFaceConfig, QualityConfig
 from aegisvision.pipeline import SecurityPipeline
 
+args = sys.argv[1:]
 
 def main():
     # Change camera_source to an RTSP URL to test against a real IP/CCTV camera:
@@ -14,8 +17,11 @@ def main():
 
     config = AppConfig(
         camera_source=camera_index,
-        quality=QualityConfig(min_face_quality=20.0, debug=True),
-        alert_on_concealed=True,
+        quality=QualityConfig(
+            min_face_quality=20.0, 
+            debug=True if "qualitydebug" in args else False
+        ),
+        alert_on_concealed=True if "conceal" in args else False,
         insightface=InsightFaceConfig(model_name="buffalo_sc", det_size=320)
     )
     SecurityPipeline(config).run()
