@@ -14,12 +14,13 @@ class FaceQualityGate:
     def __init__(self, config):
         self.cfg = config
 
-    def check(self, frame_shape, box, kps=None):
+    def check(self, frame_shape, box, kps=None, quality=None):
         """Return (accepted: bool, reason: str).
 
         frame_shape : the frame's .shape (h, w, ...)
         box         : (x, y, w, h)
         kps         : optional list of 5 (x, y) facial landmarks (InsightFace)
+        quality     : optional face-quality score (ArcFace embedding norm)
         """
         h_img, w_img = frame_shape[:2]
         x, y, w, h = box
@@ -42,5 +43,13 @@ class FaceQualityGate:
             for (px, py) in kps:
                 if px < m or py < m or px > (w_img - m) or py > (h_img - m):
                     return False, "landmark outside frame"
+
+        # 4. Occlusion / low-quality: ArcFace embedding magnitude. A masked or
+        #    heavily-covered face scores low here even when fully in-frame.
+        if quality is not None:
+            if self.cfg.debug:
+                print(f"[QUALITY] q={quality:.1f}")
+            if self.cfg.min_face_quality > 0 and quality < self.cfg.min_face_quality:
+                return False, f"occluded/low quality (q={quality:.1f})"
 
         return True, "ok"

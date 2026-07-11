@@ -9,6 +9,8 @@ The embedding is attached to each Detection via `extra["embedding"]`, so the
 rest of the app stays unchanged — it's still just a list of Detection objects.
 """
 
+import numpy as np
+
 from .base import Detector, Detection
 
 
@@ -39,13 +41,18 @@ class InsightFaceDetector(Detector):
             box = (int(x1), int(y1), int(x2 - x1), int(y2 - y1))
             # InsightFace gives 5 landmarks (eyes, nose, mouth corners).
             kps = f.kps.tolist() if getattr(f, "kps", None) is not None else None
+            # Quality/occlusion proxy: magnitude of the RAW (un-normalised)
+            # ArcFace embedding. High = clean face, low = occluded/blurry.
+            quality = (float(np.linalg.norm(f.embedding))
+                       if getattr(f, "embedding", None) is not None else None)
 
-            # Quality gate: drop cut-off / incomplete faces before they ever
-            # reach recognition, so they can't be mistaken for a new person.
+            # Quality gate: drop cut-off / incomplete / occluded faces before
+            # they ever reach recognition, so they can't be mistaken for a new
+            # person.
             if self.quality is not None:
-                ok, reason = self.quality.check(frame.shape, box, kps)
+                ok, reason = self.quality.check(frame.shape, box, kps, quality)
                 if not ok:
-                    print(f"[SKIP] partial face ({reason})")
+                    print(f"[SKIP] {reason}")
                     continue
 
             detections.append(Detection(
@@ -54,6 +61,7 @@ class InsightFaceDetector(Detector):
                 box=box,
                 # normed_embedding is L2-normalised, so cosine similarity
                 # between two of them is just a dot product.
-                extra={"embedding": f.normed_embedding, "kps": kps},
+                extra={"embedding": f.normed_embedding, "kps": kps,
+                       "quality": quality},
             ))
         return detections

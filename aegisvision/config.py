@@ -49,6 +49,16 @@ class QualityConfig:
     # Require all 5 InsightFace landmarks to be inside the frame.
     require_landmarks_inside: bool = True
 
+    # --- occlusion / quality proxy -------------------------------------
+    # ArcFace embedding magnitude correlates with face quality: clean frontal
+    # unoccluded faces score HIGH, occluded/blurry/extreme faces score LOW.
+    # Faces below this norm are rejected as occluded/low-quality.
+    # 0.0 = disabled. You MUST calibrate this: run with debug=True, watch the
+    # printed q= values for good vs masked faces, then set the cutoff between.
+    min_face_quality: float = 0.0
+    # Print each face's quality score so you can pick min_face_quality.
+    debug: bool = False
+
 
 @dataclass
 class FaceStoreConfig:
