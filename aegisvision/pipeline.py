@@ -15,12 +15,14 @@ from .storage.face_store import FaceStore
 
 def build_face_detector(config):
     """Pick the face engine from config. Adding a new engine = one more branch."""
+    from .detectors.quality import FaceQualityGate
+    gate = FaceQualityGate(config.quality)  # shared quality filter for any engine
     if config.face_engine == "insightface":
         from .detectors.insightface_detector import InsightFaceDetector
-        return InsightFaceDetector(config.insightface)
+        return InsightFaceDetector(config.insightface, gate)
     if config.face_engine == "haar":
         from .detectors.face import FaceDetector
-        return FaceDetector(config.face)
+        return FaceDetector(config.face, gate)
     raise ValueError(f"Unknown face_engine: {config.face_engine}")
 
 

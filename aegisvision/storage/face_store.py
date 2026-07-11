@@ -24,7 +24,9 @@ class FaceStore:
         self.cfg = config
         self.folder = Path(config.folder)
         self.folder.mkdir(parents=True, exist_ok=True)
-        # Each entry: {"id": int, "embedding": np.ndarray, "count": int}
+        # Each entry: {"id": int, "embeddings": [np.ndarray, ...], "count": int}
+        # We keep MULTIPLE embeddings per person (different angles/lighting) so a
+        # single odd frame can't spawn a duplicate identity.
         self._known = []
         self._next_id = 1
 
@@ -43,21 +45,33 @@ class FaceStore:
     def _match(self, embedding):
         """Return the known person this embedding matches, or None if new.
 
-        Both embeddings are L2-normalised, so cosine similarity == dot product.
+        We compare against the BEST of each person's stored embeddings, so any
+        one of their past angles is enough to recognise them.
+        Embeddings are L2-normalised, so cosine similarity == dot product.
         """
         if embedding is None or not self._known:
             return None
-        sims = [float(np.dot(embedding, k["embedding"])) for k in self._known]
-        best_i = int(np.argmax(sims))
-        if sims[best_i] >= self.cfg.recognition_threshold:
-            return self._known[best_i]
+        best_person, best_sim = None, -1.0
+        for person in self._known:
+            sim = max(float(np.dot(embedding, e)) for e in person["embeddings"])
+            if sim > best_sim:
+                best_person, best_sim = person, sim
+        if best_sim >= self.cfg.recognition_threshold:
+            return best_person
         return None
 
     def _register(self, embedding):
-        person = {"id": self._next_id, "embedding": embedding, "count": 0}
+        person = {"id": self._next_id, "embeddings": [embedding], "count": 0}
         self._known.append(person)
         self._next_id += 1
         return person
+
+    def _add_sample(self, person, embedding):
+        """Grow a person's embedding set, capped, so recognition stays robust."""
+        if embedding is None:
+            return
+        if len(person["embeddings"]) < self.cfg.max_samples_per_person:
+            person["embeddings"].append(embedding)
 
     # ---- main entry point -------------------------------------------------
     def save(self, frame, faces) -> int:
@@ -70,8 +84,10 @@ class FaceStore:
             match = self._match(embedding)
 
             if match is not None:
-                # Known person — just note we saw them again.
+                # Known person — note we saw them again, and enrich their
+                # embedding set so future recognition is even more robust.
                 match["count"] += 1
+                self._add_sample(match, embedding)
                 print(f"[SEEN] person_{match['id']:03d} "
                       f"(seen {match['count']}x)")
                 continue

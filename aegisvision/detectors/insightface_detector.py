@@ -15,8 +15,9 @@ from .base import Detector, Detection
 class InsightFaceDetector(Detector):
     name = "face"
 
-    def __init__(self, config):
+    def __init__(self, config, quality_gate=None):
         self.cfg = config
+        self.quality = quality_gate  # optional FaceQualityGate; None = accept all
         # Imported lazily so the app still starts if InsightFace isn't installed
         # (e.g. when running the lightweight Haar engine instead).
         from insightface.app import FaceAnalysis
@@ -35,12 +36,24 @@ class InsightFaceDetector(Detector):
             if f.det_score < self.cfg.min_score:
                 continue
             x1, y1, x2, y2 = f.bbox.astype(int)
+            box = (int(x1), int(y1), int(x2 - x1), int(y2 - y1))
+            # InsightFace gives 5 landmarks (eyes, nose, mouth corners).
+            kps = f.kps.tolist() if getattr(f, "kps", None) is not None else None
+
+            # Quality gate: drop cut-off / incomplete faces before they ever
+            # reach recognition, so they can't be mistaken for a new person.
+            if self.quality is not None:
+                ok, reason = self.quality.check(frame.shape, box, kps)
+                if not ok:
+                    print(f"[SKIP] partial face ({reason})")
+                    continue
+
             detections.append(Detection(
                 label="face",
                 confidence=float(f.det_score),
-                box=(int(x1), int(y1), int(x2 - x1), int(y2 - y1)),
+                box=box,
                 # normed_embedding is L2-normalised, so cosine similarity
                 # between two of them is just a dot product.
-                extra={"embedding": f.normed_embedding},
+                extra={"embedding": f.normed_embedding, "kps": kps},
             ))
         return detections

@@ -39,12 +39,26 @@ class InsightFaceConfig:
 
 
 @dataclass
+class QualityConfig:
+    # Reject a face whose box OR any landmark is within this many pixels of the
+    # frame border — that's a face cut off by the camera edge.
+    edge_margin_px: int = 8
+    # A cleanly-detected face box is roughly square. A half-cut face is not.
+    min_aspect: float = 0.6      # width / height lower bound
+    max_aspect: float = 1.6      # width / height upper bound
+    # Require all 5 InsightFace landmarks to be inside the frame.
+    require_landmarks_inside: bool = True
+
+
+@dataclass
 class FaceStoreConfig:
     folder: str = "people"           # where cropped faces are saved
     padding: float = 0.2             # extra margin around the face box (fraction)
     # Cosine-similarity cutoff for "same person". Higher = stricter.
     # ~0.5 is a good start for buffalo models; raise to reduce false matches.
     recognition_threshold: float = 0.5
+    # Keep several embeddings per person so identity is robust to angle/lighting.
+    max_samples_per_person: int = 5
 
 
 @dataclass
@@ -58,6 +72,7 @@ class AppConfig:
     motion: MotionConfig = None
     face: FaceConfig = None
     insightface: InsightFaceConfig = None
+    quality: QualityConfig = None
     face_store: FaceStoreConfig = None
 
     def __post_init__(self):
@@ -65,4 +80,5 @@ class AppConfig:
         self.motion = self.motion or MotionConfig()
         self.face = self.face or FaceConfig()
         self.insightface = self.insightface or InsightFaceConfig()
+        self.quality = self.quality or QualityConfig()
         self.face_store = self.face_store or FaceStoreConfig()

@@ -14,8 +14,9 @@ from .base import Detector, Detection
 class FaceDetector(Detector):
     name = "face"
 
-    def __init__(self, config):
+    def __init__(self, config, quality_gate=None):
         self.cfg = config
+        self.quality = quality_gate  # optional FaceQualityGate; None = accept all
         # Ships inside the opencv-python package, no separate file needed.
         cascade_path = cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
         self._cascade = cv2.CascadeClassifier(cascade_path)
@@ -30,5 +31,13 @@ class FaceDetector(Detector):
             minNeighbors=self.cfg.min_neighbors,
             minSize=(self.cfg.min_size, self.cfg.min_size),
         )
-        return [Detection(label="face", box=(int(x), int(y), int(w), int(h)))
-                for (x, y, w, h) in faces]
+        detections = []
+        for (x, y, w, h) in faces:
+            box = (int(x), int(y), int(w), int(h))
+            # Haar has no landmarks, so the gate only does edge + aspect checks.
+            if self.quality is not None:
+                ok, _ = self.quality.check(frame.shape, box, None)
+                if not ok:
+                    continue
+            detections.append(Detection(label="face", box=box))
+        return detections
