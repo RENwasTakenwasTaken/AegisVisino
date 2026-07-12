@@ -7,6 +7,14 @@ opencv-python==4.10.0.84
 insightface
 onnxruntime          # CPU inference backend InsightFace runs on
 
-# Weapon / threat-object detection (knife via COCO; gun needs a weapon model).
-# NOTE: pulls in PyTorch — a large install, slower on the ARM board.
-ultralytics
+# Weapon / threat-object detection.
+# The board runs the ONNX backend on onnxruntime (already installed above) —
+# NO extra dependency needed there.
+# ultralytics (below) is only needed on your LAPTOP to export the model
+#   yolo export model=yolov8n.pt format=onnx
+# or on the board only if you switch YOLOConfig.backend to "ultralytics".
+# It pulls in PyTorch (large). Install it where you need it, not on the board:
+#   ultralytics
+
+# Lightweight HTTP server that feeds alerts to the mobile app over Wi-Fi/LAN.
+flask

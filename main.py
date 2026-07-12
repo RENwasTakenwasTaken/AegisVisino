@@ -6,7 +6,7 @@ import sys
 
 from aegisvision.config import (
     AppConfig, InsightFaceConfig, QualityConfig, OcclusionConfig, TamperConfig,
-    YOLOConfig,
+    YOLOConfig, ServerConfig,
 )
 from aegisvision.pipeline import SecurityPipeline
 
@@ -33,9 +33,14 @@ def main():
         ),
         yolo=YOLOConfig(
             enabled=True if "weapon" in args else False,
-            model_path="yolov8n.pt",   # COCO -> detects "knife"; swap for a gun model
+            backend="onnx",              # no PyTorch; runs on onnxruntime
+            model_path="yolov8n.onnx",   # export on laptop; COCO -> detects "knife"
             conf_threshold=0.4,
             debug=True if "weapondebug" in args else False,
+        ),
+        server=ServerConfig(
+            enabled=True if "server" in args else False,  # mobile-app alert API
+            port=8000,
         ),
         alert_on_concealed=True if "conceal" in args else False,
         insightface=InsightFaceConfig(model_name="buffalo_sc", det_size=320)

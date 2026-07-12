@@ -98,14 +98,31 @@ class TamperConfig:
 class YOLOConfig:
     # Weapon / threat-object detection.
     enabled: bool = False
+    # Which runtime to use:
+    #   "onnx"        -> onnxruntime, NO PyTorch (default; lean + fast on board)
+    #   "ultralytics" -> the ultralytics package (needs PyTorch installed)
+    backend: str = "onnx"
+    # For "onnx": path to a .onnx model (export on laptop: yolo export ... format=onnx)
+    # For "ultralytics": a .pt model (e.g. "yolov8n.pt").
     # Default COCO model detects "knife". For "gun" use a weapon-trained model.
-    model_path: str = "yolov8n.pt"
+    model_path: str = "yolov8n.onnx"
     conf_threshold: float = 0.4  # minimum detection confidence
-    imgsz: int = 480             # inference size; smaller = faster on the board
+    iou_threshold: float = 0.45  # NMS overlap threshold (onnx backend)
+    imgsz: int = 640             # only used if the ONNX model has a dynamic size
     # Class names to treat as threats (matched against the model's own labels).
     target_classes: tuple = ("knife", "gun", "pistol", "rifle", "weapon")
-    device: str = "cpu"          # "cpu" on the Uno Q
+    device: str = "cpu"          # ultralytics backend device
+    providers: tuple = ("CPUExecutionProvider",)  # onnx backend providers
     debug: bool = False
+
+
+@dataclass
+class ServerConfig:
+    # On-board HTTP server the mobile app polls over Wi-Fi/LAN.
+    enabled: bool = False
+    host: str = "0.0.0.0"   # 0.0.0.0 = reachable from other devices on the LAN
+    port: int = 8000
+    max_alerts: int = 50    # most-recent alerts kept in memory
 
 
 @dataclass
@@ -135,6 +152,7 @@ class AppConfig:
     yolo: YOLOConfig = None
     face_store: FaceStoreConfig = None
     alert: AlertConfig = None
+    server: ServerConfig = None
 
     def __post_init__(self):
         # Give each sub-config a default instance if the caller didn't pass one.
@@ -147,3 +165,4 @@ class AppConfig:
         self.yolo = self.yolo or YOLOConfig()
         self.face_store = self.face_store or FaceStoreConfig()
         self.alert = self.alert or AlertConfig()
+        self.server = self.server or ServerConfig()

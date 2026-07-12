@@ -32,11 +32,14 @@ def build_face_detector(config):
     raise ValueError(f"Unknown face_engine: {config.face_engine}")
 
 
-def build_alert_manager(config):
+def build_alert_manager(config, server=None):
     """Assemble the alert outputs. Add the 12V siren / mobile push here later."""
     alerters = [ConsoleAlerter()]
     if config.alert.snapshot:
         alerters.append(SnapshotAlerter(config.alert.snapshot_folder))
+    if server is not None:
+        from .alerts.api_alerter import ApiAlerter
+        alerters.append(ApiAlerter(server))  # feeds the mobile app over Wi-Fi
     return AlertManager(alerters, cooldown_seconds=config.alert.cooldown_seconds)
 
 
@@ -48,16 +51,29 @@ class SecurityPipeline:
         self.tamper = CameraTamperDetector(config.tamper) if config.tamper.enabled else None
         self.weapon = self._build_weapon_detector(config)
         self.face_store = FaceStore(config.face_store) if config.save_faces else None
-        self.alerts = build_alert_manager(config)
+        # Start the on-board alert server (for the mobile app) if enabled.
+        self.server = None
+        if config.server.enabled:
+            from .server.alert_server import AlertServer
+            self.server = AlertServer(config.server)
+            self.server.start()
+        self.alerts = build_alert_manager(config, self.server)
         self._covered = False
         self._frame_index = 0
 
     @staticmethod
     def _build_weapon_detector(config):
+        """Pick the weapon-detection backend. ONNX (no torch) is the default;
+        'ultralytics' is available if you ever need the .pt/PyTorch path."""
         if not config.yolo.enabled:
             return None
-        from .detectors.yolo_detector import YOLODetector
-        return YOLODetector(config.yolo)
+        if config.yolo.backend == "onnx":
+            from .detectors.yolo_onnx import YOLOOnnxDetector
+            return YOLOOnnxDetector(config.yolo)
+        if config.yolo.backend == "ultralytics":
+            from .detectors.yolo_detector import YOLODetector
+            return YOLODetector(config.yolo)
+        raise ValueError(f"Unknown yolo backend: {config.yolo.backend}")
 
     def _should_process(self) -> bool:
         """Frame-skipping to save CPU on the embedded board."""
